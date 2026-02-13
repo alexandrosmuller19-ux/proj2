@@ -11,7 +11,7 @@ pygame.init()
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 FPS = 60
-NIGHT_LENGTH = 480  # 8 minutes in seconds (reduced for testing)
+NIGHT_LENGTH = 120  # 2 minuter per match
 
 # Colors
 BLACK = (0, 0, 0)
@@ -21,6 +21,7 @@ GREEN = (0, 255, 0)
 BLUE = (100, 100, 255)
 GRAY = (128, 128, 128)
 DARK_GRAY = (64, 64, 64)
+MONITOR_COLOR = (30, 80, 30)  # CRT monitor 
 
 class Game:
     def __init__(self):
@@ -58,15 +59,15 @@ class Game:
         drain_rate = 0.1  # Base drain
         
         if self.left_door_closed:
-            drain_rate += 0.5
+            drain_rate += 0.4
         if self.right_door_closed:
-            drain_rate += 0.5
+            drain_rate += 0.4
         if self.left_light_on:
-            drain_rate += 0.3
-        if self.right_light_on:
-            drain_rate += 0.3
-        if self.camera_open:
             drain_rate += 0.2
+        if self.right_light_on:
+            drain_rate += 0.2
+        if self.camera_open:
+            drain_rate += 0.1
         
         self.power -= drain_rate * dt
         self.power = max(0, self.power)
@@ -83,15 +84,24 @@ class Game:
         """Update all animatronics"""
         for anim in self.animatronics:
             if anim.update(dt, self.game_hour):
-                anim.move()
-                
-                # Check if animatronic reaches player
-                if anim.location == Location.LEFT_DOOR and not self.left_door_closed:
-                    if random.random() < 0.3:  # 30% chance to attack when at door
-                        self.trigger_jumpscare(anim)
-                elif anim.location == Location.RIGHT_DOOR and not self.right_door_closed:
-                    if random.random() < 0.3:
-                        self.trigger_jumpscare(anim)
+                # Check if animatronic is at a door
+                if anim.location == Location.LEFT_DOOR:
+                    # Pass door state and dt to check for retreat
+                    anim.move(door_blocked=self.left_door_closed, dt=dt)
+                    # Only attack if door is open 
+                    if not self.left_door_closed:
+                        attack_chance = 0.8 + (anim.ai_level * 0.05) + (self.game_hour * 0.05)
+                        if random.random() < attack_chance:
+                            self.trigger_jumpscare(anim)
+                elif anim.location == Location.RIGHT_DOOR:
+                    anim.move(door_blocked=self.right_door_closed, dt=dt)
+                    # Only attack if door is open
+                    if not self.right_door_closed:
+                        attack_chance = 0.8 + (anim.ai_level * 0.05) + (self.game_hour * 0.05)
+                        if random.random() < attack_chance:
+                            self.trigger_jumpscare(anim)
+                else:
+                    anim.move(door_blocked=False, dt=dt)
     
     def trigger_jumpscare(self, animatronic: Animatronic):
         """Trigger game over with jumpscare"""
@@ -108,138 +118,229 @@ class Game:
         """Draw main menu"""
         self.screen.fill(BLACK)
         
-        title = self.font.render("Five Nights at Blankas", True, WHITE)
-        title_rect = title.get_rect(center=(SCREEN_WIDTH // 2, 200))
+        # Draw decorative lines
+        pygame.draw.line(self.screen, GRAY, (0, 150), (SCREEN_WIDTH, 150), 2)
+        pygame.draw.line(self.screen, GRAY, (0, SCREEN_HEIGHT - 150), (SCREEN_WIDTH, SCREEN_HEIGHT - 150), 2)
+        
+        title = self.font.render("FIVE NIGHTS AT BLANKAS", True, RED)
+        title_rect = title.get_rect(center=(SCREEN_WIDTH // 2, 100))
         self.screen.blit(title, title_rect)
         
-        start_text = self.font.render("Press SPACE to Start Night", True, GREEN)
-        start_rect = start_text.get_rect(center=(SCREEN_WIDTH // 2, 400))
+        subtitle = self.small_font.render("Can you survive until 6 AM?", True, WHITE)
+        subtitle_rect = subtitle.get_rect(center=(SCREEN_WIDTH // 2, 140))
+        self.screen.blit(subtitle, subtitle_rect)
+        
+        # Start button
+        start_text = self.font.render("Press SPACE to Start", True, GREEN)
+        start_rect = start_text.get_rect(center=(SCREEN_WIDTH // 2, 250))
         self.screen.blit(start_text, start_rect)
         
+        # Draw controls
         controls = [
-            "Controls:",
-            "A/D - Close Left/Right Door",
-            "Q/E - Left/Right Light",
-            "SPACE - Toggle Camera",
-            "Arrow Keys - Switch Camera View"
+            "━━━ CONTROLS ━━━",
+            "A - Close Left Door",
+            "D - Close Right Door",
+            "Q - Turn On Left Light",
+            "E - Turn On Right Light",
+            "SPACE - Open/Close Camera",
+            "ARROW KEYS - Switch Camera View",
+            "",
+            "━━━ OBJECTIVE ━━━",
+            "Survive from 12 AM to 6 AM",
+            "Manage your power carefully",
+            "Use doors to block animatronics",
+            "Use lights to see who's there"
         ]
         
-        y = 500
+        y = 350
         for line in controls:
-            text = self.small_font.render(line, True, GRAY)
+            if "CONTROLS" in line or "OBJECTIVE" in line:
+                text = self.small_font.render(line, True, RED)
+            elif line == "":
+                y += 10
+                continue
+            else:
+                text = self.small_font.render(line, True, WHITE)
             rect = text.get_rect(center=(SCREEN_WIDTH // 2, y))
             self.screen.blit(text, rect)
-            y += 30
+            y += 20
     
     def draw_office(self):
-        """Draw office view"""
-        self.screen.fill(DARK_GRAY)
+        """Draw office view - FNAF style"""
+        # Dark office background
+        self.screen.fill(BLACK)
         
-        # Draw office background (placeholder)
-        pygame.draw.rect(self.screen, (50, 50, 50), (0, 300, SCREEN_WIDTH, 420))
+        # Draw office interior (desk area)
+        pygame.draw.rect(self.screen, (40, 40, 40), (0, 400, SCREEN_WIDTH, 320))
+        pygame.draw.rect(self.screen, (60, 60, 60), (100, 380, SCREEN_WIDTH - 200, 340), 3)
         
-        # Draw doors
+        # Draw left side panel
+        pygame.draw.rect(self.screen, (50, 50, 50), (0, 350, 200, 370))
+        pygame.draw.rect(self.screen, GRAY, (0, 350, 200, 370), 2)
+        
+        # Draw right side panel  
+        pygame.draw.rect(self.screen, (50, 50, 50), (SCREEN_WIDTH - 200, 350, 200, 370))
+        pygame.draw.rect(self.screen, GRAY, (SCREEN_WIDTH - 200, 350, 200, 370), 2)
+        
+        # Draw doors with status
         left_door_color = RED if self.left_door_closed else GREEN
         right_door_color = RED if self.right_door_closed else GREEN
         
-        pygame.draw.rect(self.screen, left_door_color, (50, 350, 100, 250))
-        pygame.draw.rect(self.screen, right_door_color, (SCREEN_WIDTH - 150, 350, 100, 250))
+        # Left door visual
+        pygame.draw.rect(self.screen, left_door_color, (30, 400, 120, 280))
+        pygame.draw.rect(self.screen, WHITE, (30, 400, 120, 280), 2)
+        left_status = "CLOSED" if self.left_door_closed else "OPEN"
+        left_door_text = self.small_font.render(f"LEFT DOOR\n{left_status}", True, WHITE)
+        self.screen.blit(left_door_text, (35, 555))
         
-        # Draw door labels
-        left_text = self.small_font.render("LEFT DOOR (A)", True, WHITE)
-        self.screen.blit(left_text, (55, 620))
+        # Right door visual
+        pygame.draw.rect(self.screen, right_door_color, (SCREEN_WIDTH - 150, 400, 120, 280))
+        pygame.draw.rect(self.screen, WHITE, (SCREEN_WIDTH - 150, 400, 120, 280), 2)
+        right_status = "CLOSED" if self.right_door_closed else "OPEN"
+        right_door_text = self.small_font.render(f"RIGHT DOOR\n{right_status}", True, WHITE)
+        self.screen.blit(right_door_text, (SCREEN_WIDTH - 145, 555))
         
-        right_text = self.small_font.render("RIGHT DOOR (D)", True, WHITE)
-        self.screen.blit(right_text, (SCREEN_WIDTH - 145, 620))
+        # Left light panel
+        pygame.draw.rect(self.screen, (30, 30, 30), (20, 365, 160, 80))
+        pygame.draw.rect(self.screen, (0, 255, 0) if self.left_light_on else GRAY, (20, 365, 160, 80), 2)
+        light_text = self.small_font.render("LEFT LIGHT", True, WHITE)
+        self.screen.blit(light_text, (30, 375))
+        light_status = "ON" if self.left_light_on else "OFF"
+        light_status_text = self.small_font.render(f"[{light_status}] Q", True, (0, 255, 0) if self.left_light_on else GRAY)
+        self.screen.blit(light_status_text, (30, 405))
         
-        # Draw light indicators
+        # Right light panel
+        pygame.draw.rect(self.screen, (30, 30, 30), (SCREEN_WIDTH - 180, 365, 160, 80))
+        pygame.draw.rect(self.screen, (0, 255, 0) if self.right_light_on else GRAY, (SCREEN_WIDTH - 180, 365, 160, 80), 2)
+        light_text = self.small_font.render("RIGHT LIGHT", True, WHITE)
+        self.screen.blit(light_text, (SCREEN_WIDTH - 170, 375))
+        light_status = "ON" if self.right_light_on else "OFF"
+        light_status_text = self.small_font.render(f"[{light_status}] E", True, (0, 255, 0) if self.right_light_on else GRAY)
+        self.screen.blit(light_status_text, (SCREEN_WIDTH - 170, 405))
+        
+        # Camera button - center top
+        camera_button_color = GREEN if self.camera_open else BLUE
+        pygame.draw.rect(self.screen, camera_button_color, (SCREEN_WIDTH // 2 - 80, 20, 160, 50))
+        pygame.draw.rect(self.screen, WHITE, (SCREEN_WIDTH // 2 - 80, 20, 160, 50), 2)
+        camera_text = self.small_font.render("CAMERA SYSTEM", True, BLACK)
+        camera_rect = camera_text.get_rect(center=(SCREEN_WIDTH // 2, 45))
+        self.screen.blit(camera_text, camera_rect)
+        
+        # Show animatronics at doors with lights
         if self.left_light_on:
-            pygame.draw.circle(self.screen, (255, 255, 100), (100, 300), 30)
-            # Check if animatronic is at left door
             at_left = [a.name for a in self.animatronics if a.location == Location.LEFT_DOOR]
             if at_left:
-                warning = self.font.render(f"{at_left[0]} AT DOOR!", True, RED)
-                self.screen.blit(warning, (50, 250))
+                warning = self.font.render(f"WARNING: {at_left[0]}", True, RED)
+                self.screen.blit(warning, (SCREEN_WIDTH // 4 - 100, 80))
         
         if self.right_light_on:
-            pygame.draw.circle(self.screen, (255, 255, 100), (SCREEN_WIDTH - 100, 300), 30)
             at_right = [a.name for a in self.animatronics if a.location == Location.RIGHT_DOOR]
             if at_right:
-                warning = self.font.render(f"{at_right[0]} AT DOOR!", True, RED)
-                self.screen.blit(warning, (SCREEN_WIDTH - 250, 250))
+                warning = self.font.render(f"WARNING: {at_right[0]}", True, RED)
+                self.screen.blit(warning, (3 * SCREEN_WIDTH // 4 - 100, 80))
         
         # Draw HUD
         self.draw_hud()
     
     def draw_camera(self):
-        """Draw camera view"""
+        """Draw camera view - FNAF style monitor"""
         self.screen.fill(BLACK)
         
-        # Camera static effect
-        for _ in range(100):
-            x = random.randint(0, SCREEN_WIDTH)
-            y = random.randint(0, SCREEN_HEIGHT)
-            pygame.draw.circle(self.screen, (50, 50, 50), (x, y), 1)
+        # Draw monitor frame
+        monitor_rect = pygame.Rect(50, 50, SCREEN_WIDTH - 100, SCREEN_HEIGHT - 150)
+        pygame.draw.rect(self.screen, (40, 40, 40), monitor_rect)
+        pygame.draw.rect(self.screen, GRAY, monitor_rect, 3)
         
-        # Draw camera view area
-        pygame.draw.rect(self.screen, (30, 30, 30), (100, 100, SCREEN_WIDTH - 200, SCREEN_HEIGHT - 300))
+        # Draw monitor screen (CRT green)
+        pygame.draw.rect(self.screen, MONITOR_COLOR, (70, 70, SCREEN_WIDTH - 140, SCREEN_HEIGHT - 190))
+        
+        # Camera static/scanlines effect
+        for _ in range(80):
+            x = random.randint(70, SCREEN_WIDTH - 70)
+            y = random.randint(70, SCREEN_HEIGHT - 120)
+            pygame.draw.circle(self.screen, (40, 120, 40), (x, y), 1)
+        
+        # Draw scanlines for CRT effect
+        for y in range(70, SCREEN_HEIGHT - 120, 3):
+            pygame.draw.line(self.screen, (0, 0, 0), (70, y), (SCREEN_WIDTH - 70, y), 1)
         
         # Show current location
         location_names = {
-            Location.STAGE: "Faculty Room",
-            Location.DINING: "Dining Area",
-            Location.HALLWAY: "Corridor",
-            Location.LEFT_DOOR: "Left Door",
-            Location.RIGHT_DOOR: "Right Door"
+            Location.STAGE: "STAGE",
+            Location.DINING: "DINING AREA",
+            Location.HALLWAY: "HALLWAY",
+            Location.LEFT_DOOR: "LEFT DOOR",
+            Location.RIGHT_DOOR: "RIGHT DOOR"
         }
         
-        cam_text = self.font.render(f"Camera: {location_names[self.current_camera]}", True, GREEN)
-        self.screen.blit(cam_text, (120, 120))
+        cam_text = self.font.render(f"CAM: {location_names[self.current_camera]}", True, GREEN)
+        self.screen.blit(cam_text, (90, 100))
         
         # Show animatronics at current location
         at_location = [a for a in self.animatronics if a.location == self.current_camera]
-        y = 200
-        for anim in at_location:
-            # Draw simple representation
-            pygame.draw.circle(self.screen, RED, (SCREEN_WIDTH // 2, y), 40)
-            name_text = self.small_font.render(anim.name, True, WHITE)
-            name_rect = name_text.get_rect(center=(SCREEN_WIDTH // 2, y))
-            self.screen.blit(name_text, name_rect)
-            y += 100
+        if at_location:
+            y = 200
+            for anim in at_location:
+                # Draw animatronic representation
+                pygame.draw.circle(self.screen, RED, (SCREEN_WIDTH // 2, y), 50)
+                pygame.draw.circle(self.screen, (255, 100, 100), (SCREEN_WIDTH // 2, y), 45)
+                name_text = self.font.render(anim.name, True, WHITE)
+                name_rect = name_text.get_rect(center=(SCREEN_WIDTH // 2, y))
+                self.screen.blit(name_text, name_rect)
+                y += 120
+        else:
+            empty_text = self.small_font.render("[NO MOVEMENT DETECTED]", True, GREEN)
+            empty_rect = empty_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+            self.screen.blit(empty_text, empty_rect)
         
-        # Draw camera selection buttons
-        cam_y = SCREEN_HEIGHT - 150
+        # Draw camera selection buttons at bottom
+        cam_y = SCREEN_HEIGHT - 90
         cam_buttons = [
-            ("1-Faculty Room", Location.STAGE),
-            ("2-Dining", Location.DINING),
-            ("3-Corridor", Location.HALLWAY),
-            ("4-Left", Location.LEFT_DOOR),
-            ("5-Right", Location.RIGHT_DOOR)
+            ("1-STAGE", Location.STAGE, 120),
+            ("2-DINING", Location.DINING, 320),
+            ("3-HALLWAY", Location.HALLWAY, 520),
+            ("4-LEFT", Location.LEFT_DOOR, 720),
+            ("5-RIGHT", Location.RIGHT_DOOR, 920)
         ]
         
-        x = 150
-        for label, loc in cam_buttons:
+        for label, loc, btn_x in cam_buttons:
             color = GREEN if loc == self.current_camera else GRAY
             text = self.small_font.render(label, True, color)
-            self.screen.blit(text, (x, cam_y))
-            x += 200
+            rect = text.get_rect(center=(btn_x, cam_y))
+            self.screen.blit(text, rect)
+            if loc == self.current_camera:
+                pygame.draw.rect(self.screen, GREEN, (btn_x - 65, cam_y - 20, 130, 30), 2)
         
         # Draw HUD
         self.draw_hud()
         
-        hint = self.small_font.render("Press SPACE to close camera", True, WHITE)
-        self.screen.blit(hint, (SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT - 50))
+        # Draw close instruction
+        hint = self.small_font.render("Press SPACE to close camera", True, GREEN)
+        self.screen.blit(hint, (SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT - 35))
     
     def draw_hud(self):
-        """Draw heads-up display"""
-        # Power
-        power_text = self.font.render(f"Power: {int(self.power)}%", True, WHITE if self.power > 20 else RED)
+        """Draw heads-up display - FNAF style"""
+        # Power meter
+        power_text = self.font.render(f"POWER: {int(self.power)}%", True, WHITE if self.power > 20 else RED)
         self.screen.blit(power_text, (20, 20))
+        
+        # Power bar
+        bar_width = 200
+        bar_height = 20
+        bar_x = 20
+        bar_y = 60
+        pygame.draw.rect(self.screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height))
+        
+        # Power bar fill
+        power_percent = max(0, min(100, self.power)) / 100.0
+        bar_fill_color = GREEN if self.power > 20 else RED
+        pygame.draw.rect(self.screen, bar_fill_color, (bar_x, bar_y, bar_width * power_percent, bar_height))
+        pygame.draw.rect(self.screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 2)
         
         # Time
         hours = ["12 AM", "1 AM", "2 AM", "3 AM", "4 AM", "5 AM", "6 AM"]
-        time_text = self.font.render(f"Time: {hours[min(self.game_hour, 6)]}", True, WHITE)
-        self.screen.blit(time_text, (SCREEN_WIDTH - 200, 20))
+        time_text = self.font.render(f"TIME: {hours[min(self.game_hour, 6)]}", True, WHITE)
+        self.screen.blit(time_text, (SCREEN_WIDTH - 250, 20))
     
     def draw_game_over(self):
         """Draw game over screen"""
@@ -248,27 +349,39 @@ class Game:
         if self.jumpscare_timer > 0:
             # Jumpscare animation
             text = self.font.render(self.jumpscare_animatronic.name.upper(), True, BLACK)
-            rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
-            self.screen.blit(text, rect)
-        else:
-            text = self.font.render("GAME OVER", True, WHITE)
-            rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+            rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50))
             self.screen.blit(text, rect)
             
+            # Draw jumpscare visual
+            pygame.draw.circle(self.screen, (255, 100, 100), (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 100), 80)
+            pygame.draw.circle(self.screen, RED, (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 100), 75)
+        else:
+            text = self.font.render("GAME OVER", True, WHITE)
+            rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50))
+            self.screen.blit(text, rect)
+            
+            reason = self.small_font.render(f"You were caught by {self.jumpscare_animatronic.name}", True, WHITE)
+            reason_rect = reason.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 20))
+            self.screen.blit(reason, reason_rect)
+            
             restart = self.small_font.render("Press SPACE to return to menu", True, WHITE)
-            restart_rect = restart.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50))
+            restart_rect = restart.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 80))
             self.screen.blit(restart, restart_rect)
     
     def draw_win(self):
         """Draw win screen"""
         self.screen.fill(GREEN)
         
-        text = self.font.render("6 AM - You survived the night!", True, WHITE)
-        rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+        text = self.font.render("6 AM - NIGHT COMPLETE!", True, WHITE)
+        rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50))
         self.screen.blit(text, rect)
         
-        restart = self.small_font.render("Press SPACE to return to menu", True, WHITE)
-        restart_rect = restart.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50))
+        sub = self.small_font.render("You survived the night!", True, BLACK)
+        sub_rect = sub.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 20))
+        self.screen.blit(sub, sub_rect)
+        
+        restart = self.small_font.render("Press SPACE to return to menu", True, BLACK)
+        restart_rect = restart.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 80))
         self.screen.blit(restart, restart_rect)
     
     def handle_input(self):
