@@ -52,8 +52,8 @@ class Animatronic:
             self.move_timer = random.uniform(2.0, 5.0)
         return False
     
-    def move(self):
-        """Move animatronic to next location"""
+    def move(self, door_blocked: bool = False, dt: float = 0):
+        """Move animatronic to next location, respecting door blocks"""
         path = {
             Location.STAGE: [Location.DINING],
             Location.DINING: [Location.HALLWAY],
@@ -61,6 +61,13 @@ class Animatronic:
             Location.LEFT_DOOR: [Location.LEFT_DOOR],
             Location.RIGHT_DOOR: [Location.RIGHT_DOOR]
         }
+        
+        # If at a door and it's blocked, sometimes try to retreat
+        if door_blocked and self.location in [Location.LEFT_DOOR, Location.RIGHT_DOOR]:
+            retreat_chance = 0.3
+            if random.random() < retreat_chance:
+                self.location = Location.HALLWAY
+                return
         
         if self.location in path:
             possible = path[self.location]
