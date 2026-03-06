@@ -1,7 +1,5 @@
-"""
-Helper module containing classes and utility functions for the FNAF-like game.
-Keeps data structures and utility functions separate from main game logic.
-"""
+# Helper module containing classes and utility functions for the FNAF-like game.
+# Keeps data structures and utility functions separate from main game logic.
 
 import random
 from enum import Enum
@@ -10,7 +8,7 @@ from typing import List, Dict, Tuple
 
 
 class GameState(Enum):
-    """Enum for different game states"""
+    # Enum for different game states
     MENU = 1
     PLAYING = 2
     CAMERA = 3
@@ -19,7 +17,7 @@ class GameState(Enum):
 
 
 class Location(Enum):
-    """Enum for game locations"""
+    # Enum for game locations
     STAGE = 0
     DINING = 1
     HALLWAY = 2
@@ -29,7 +27,7 @@ class Location(Enum):
 
 @dataclass
 class Animatronic:
-    """Dataclass representing an animatronic character"""
+    # Dataclass representing an animatronic character
     name: str
     location: Location
     ai_level: int
@@ -37,7 +35,7 @@ class Animatronic:
     active: bool = True
     
     def update(self, dt: float, game_hour: int) -> bool:
-        """Update animatronic, returns True if moved"""
+        # Update animatronic, returns True if moved
         if not self.active:
             return False
             
@@ -53,7 +51,7 @@ class Animatronic:
         return False
     
     def move(self, door_blocked: bool = False, dt: float = 0):
-        """Move animatronic to next location, respecting door blocks"""
+        # Move animatronic to next location, respecting door blocks
         path = {
             Location.STAGE: [Location.DINING],
             Location.DINING: [Location.HALLWAY],
@@ -74,10 +72,10 @@ class Animatronic:
             self.location = random.choice(possible)
 
 
-# ============= UTILITY FUNCTIONS =============
+# UTILITY FUNCTIONS
 
 def get_location_name(location: Location) -> str:
-    """Get human-readable name for a location"""
+    # Get human-readable name for a location
     location_names = {
         Location.STAGE: "Show Stage",
         Location.DINING: "Dining Area",
@@ -89,26 +87,26 @@ def get_location_name(location: Location) -> str:
 
 
 def create_animatronics() -> List[Animatronic]:
-    """Factory function to create default animatronics for a new night"""
+    # Factory function to create default animatronics for a new night
     return [
-        Animatronic("Freddy", Location.STAGE, 2, 5.0),
-        Animatronic("Bonnie", Location.STAGE, 3, 4.0),
-        Animatronic("Chica", Location.STAGE, 3, 4.5),
+        Animatronic("Tablos", Location.STAGE, 2, 5.0),
+        Animatronic("Vegeta", Location.STAGE, 3, 4.0),
+        Animatronic("Goku", Location.STAGE, 3, 4.5),
     ]
 
 
 def get_animatronics_at_location(animatronics: List[Animatronic], location: Location) -> List[Animatronic]:
-    """Get list of animatronics at a specific location"""
+    # Get list of animatronics at a specific location
     return [a for a in animatronics if a.location == location]
 
 
 def get_animatronic_names_at_location(animatronics: List[Animatronic], location: Location) -> List[str]:
-    """Get list of animatronic names at a specific location"""
+    # Get list of animatronic names at a specific location
     return [a.name for a in get_animatronics_at_location(animatronics, location)]
 
 
 def get_movement_path() -> Dict[Location, List[Location]]:
-    """Get the movement path graph for animatronics"""
+    # Get the movement path graph for animatronics
     return {
         Location.STAGE: [Location.DINING],
         Location.DINING: [Location.HALLWAY],
@@ -119,11 +117,11 @@ def get_movement_path() -> Dict[Location, List[Location]]:
 
 
 def format_game_time(game_hour: int) -> str:
-    """Format game hour to readable time string"""
+    # Format game hour to readable time string
     hours = ["12 AM", "1 AM", "2 AM", "3 AM", "4 AM", "5 AM", "6 AM"]
     return hours[min(game_hour, 6)]
 
 
 def calculate_difficulty(ai_level: int, game_hour: int) -> float:
-    """Calculate movement difficulty based on AI level and game progression"""
+    # Calculate movement difficulty based on AI level and game progression
     return (ai_level + game_hour) / 20.0
