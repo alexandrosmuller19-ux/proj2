@@ -55,10 +55,20 @@ class Game:
         
         self.state = GameState.MENU
         self.mouse_pos = (0, 0)
+        
+        # Difficulty settings
+        self.difficulty = 1.0  # 0.7 (Easy), 1.0 (Normal), 1.3 (Hard), 1.6 (Impossible)
+        self.difficulty_names = ["EASY", "NORMAL", "HARD", "IMPOSSIBLE"]
+        self.difficulty_multipliers = [0.7, 1.0, 1.3, 1.6]
+        self.selected_difficulty = 1  # Default to Normal (index 1)
+        
         self.reset_game()
     
     def reset_game(self):
         # Reset game state for new night
+        # Apply difficulty multiplier
+        self.difficulty = self.difficulty_multipliers[self.selected_difficulty]
+        
         self.power = 100.0
         self.time_elapsed = 0
         self.game_hour = 0  # 0-6 (12AM to 6AM)
@@ -82,21 +92,31 @@ class Game:
         self.left_light_cooldown = 0
         self.right_light_cooldown = 0
         self.camera_cooldown = 0
+        
+        # Door pressure tracking for AI strategy
+        self.left_door_pressure = 0.0
+        self.right_door_pressure = 0.0
     
     def update_power(self, dt: float):
-        # Update power consumption
-        drain_rate = 0.1  # Base drain
+        # Update power consumption with scaling difficulty
+        drain_rate = 0.08  # Base drain (slightly reduced)
+        
+        # Increase power drain intensity as night progresses
+        hour_multiplier = 1.0 + (self.game_hour * 0.12)
         
         if self.left_door_closed:
-            drain_rate += 0.4
+            drain_rate += 0.5 * hour_multiplier
         if self.right_door_closed:
-            drain_rate += 0.4
+            drain_rate += 0.5 * hour_multiplier
         if self.left_light_on:
-            drain_rate += 0.2
+            drain_rate += 0.15 * hour_multiplier
         if self.right_light_on:
-            drain_rate += 0.2
+            drain_rate += 0.15 * hour_multiplier
         if self.camera_open:
-            drain_rate += 0.1
+            drain_rate += 0.12 * hour_multiplier
+        
+        # Apply difficulty multiplier to power drain
+        drain_rate *= self.difficulty
         
         self.power -= drain_rate * dt
         self.power = max(0, self.power)
@@ -110,24 +130,36 @@ class Game:
             self.state = GameState.WIN
     
     def update_animatronics(self, dt: float):
+        # Calculate door pressure (how many animatronics are at each door)
+        left_at_door = len([a for a in self.animatronics if a.location == Location.LEFT_DOOR])
+        right_at_door = len([a for a in self.animatronics if a.location == Location.RIGHT_DOOR])
+        self.left_door_pressure = left_at_door
+        self.right_door_pressure = right_at_door
+        
         # Update all animatronics
         for anim in self.animatronics:
             if anim.update(dt, self.game_hour):
                 # Check if animatronic is at a door
                 if anim.location == Location.LEFT_DOOR:
-                    # Pass door state and dt to check for retreat
-                    anim.move(door_blocked=self.left_door_closed, dt=dt)
+                    # Pass door state and pressure info for strategic decisions
+                    anim.move(door_blocked=self.left_door_closed, dt=dt, 
+                             doors_pressure=(self.left_door_pressure, self.right_door_pressure))
                     # Only attack if door is open 
                     if not self.left_door_closed:
-                        attack_chance = 0.8 + (anim.ai_level * 0.05) + (self.game_hour * 0.05)
-                        if random.random() < attack_chance:
+                        # Personality-based attack chance with difficulty multiplier
+                        base_attack = 0.75 + (anim.ai_level * 0.08) + (self.game_hour * 0.08)
+                        attack_chance = base_attack * anim.aggression * self.difficulty
+                        if random.random() < min(attack_chance, 0.98):  # Cap at 98%
                             self.trigger_jumpscare(anim)
                 elif anim.location == Location.RIGHT_DOOR:
-                    anim.move(door_blocked=self.right_door_closed, dt=dt)
+                    anim.move(door_blocked=self.right_door_closed, dt=dt,
+                             doors_pressure=(self.left_door_pressure, self.right_door_pressure))
                     # Only attack if door is open
                     if not self.right_door_closed:
-                        attack_chance = 0.8 + (anim.ai_level * 0.05) + (self.game_hour * 0.05)
-                        if random.random() < attack_chance:
+                        # Personality-based attack chance with difficulty multiplier
+                        base_attack = 0.75 + (anim.ai_level * 0.08) + (self.game_hour * 0.08)
+                        attack_chance = base_attack * anim.aggression * self.difficulty
+                        if random.random() < min(attack_chance, 0.98):  # Cap at 98%
                             self.trigger_jumpscare(anim)
                 else:
                     anim.move(door_blocked=False, dt=dt)
@@ -203,6 +235,49 @@ class Game:
             rect = text.get_rect(center=(SCREEN_WIDTH // 2, y))
             self.screen.blit(text, rect)
             y += 22
+        
+        # Draw difficulty selector
+        difficulty_label = self.font.render("DIFFICULTY:", True, WHITE)
+        label_rect = difficulty_label.get_rect(center=(SCREEN_WIDTH // 2, 530))
+        self.screen.blit(difficulty_label, label_rect)
+        
+        # Draw difficulty buttons - centered and properly spaced
+        button_width = 85
+        button_height = 50
+        button_spacing = 105
+        # Center 4 buttons: (4 * 85) + (3 * 20) = 400px total, centered on 1280px
+        total_buttons_width = (len(self.difficulty_names) * button_width) + ((len(self.difficulty_names) - 1) * 20)
+        start_x = (SCREEN_WIDTH - total_buttons_width) // 2
+        button_y = 580
+        
+        for i, name in enumerate(self.difficulty_names):
+            btn_x = start_x + (i * button_spacing)
+            btn_rect = pygame.Rect(btn_x, button_y, button_width, button_height)
+            
+            # Highlight selected difficulty
+            if i == self.selected_difficulty:
+                pygame.draw.rect(self.screen, DARK_GREEN, btn_rect)
+                pygame.draw.rect(self.screen, WHITE, btn_rect, 3)
+                text_color = WHITE
+            else:
+                pygame.draw.rect(self.screen, DARK_GRAY, btn_rect)
+                pygame.draw.rect(self.screen, GRAY, btn_rect, 2)
+                text_color = GRAY
+            
+            # Draw difficulty name
+            diff_text = self.small_font.render(name, True, text_color)
+            text_rect = diff_text.get_rect(center=btn_rect.center)
+            self.screen.blit(diff_text, text_rect)
+        
+        # Draw difficulty info
+        multiplier_text = self.tiny_font.render(f"Multiplier: {self.difficulty_multipliers[self.selected_difficulty]:.1f}x", True, DIM_YELLOW)
+        multiplier_rect = multiplier_text.get_rect(center=(SCREEN_WIDTH // 2, 645))
+        self.screen.blit(multiplier_text, multiplier_rect)
+        
+        # Draw arrow instructions
+        arrow_hint = self.tiny_font.render("Use ARROW KEYS or click to change difficulty", True, GRAY)
+        arrow_rect = arrow_hint.get_rect(center=(SCREEN_WIDTH // 2, 665))
+        self.screen.blit(arrow_hint, arrow_rect)
     
     def draw_office(self):
         # Draw office view - FNAF style with dark, scary atmosphere
@@ -302,52 +377,84 @@ class Game:
         camera_rect_center = camera_text.get_rect(center=camera_rect.center)
         self.screen.blit(camera_text, camera_rect_center)
         
-        # Show animatronics at doors with lights - dark alerts
+        # Show animatronics at doors with lights - enhanced alerts with pressure indicators
         if self.left_light_on:
-            at_left = [a.name for a in self.animatronics if a.location == Location.LEFT_DOOR]
+            at_left = [a for a in self.animatronics if a.location == Location.LEFT_DOOR]
             if at_left:
-                warning_bg = pygame.Rect(50, 80, 200, 50)
+                anim = at_left[0]
+                # Glitch effect for warning box
+                glitch_offset = random.randint(-2, 2) if random.random() < 0.1 else 0
+                warning_bg = pygame.Rect(50 + glitch_offset, 80, 200, 120)
                 pygame.draw.rect(self.screen, (80, 20, 20), warning_bg)
                 pygame.draw.rect(self.screen, MUTED_RED, warning_bg, 2)
-                warning = self.font.render(f"⚠ {at_left[0]}", True, MUTED_RED)
-                self.screen.blit(warning, (60, 90))
+                # Pulsing border for more urgency
+                pulse = abs(int(pygame.time.get_ticks() * 0.003) % 20 - 10) / 10.0
+                pygame.draw.rect(self.screen, (int(255 * pulse), 0, 0), warning_bg, 1)
+                # Show animatronic image if available
+                if anim.name in self.animatronic_images:
+                    img = pygame.transform.scale(self.animatronic_images[anim.name], (80, 80))
+                    self.screen.blit(img, (60 + glitch_offset, 90))
+                warning = self.font.render(anim.name, True, MUTED_RED)
+                self.screen.blit(warning, (60 + glitch_offset, 180))
+                # Show AI personality
+                strategy_text = self.tiny_font.render(f"[{anim.strategy.upper()}]", True, DIM_YELLOW)
+                self.screen.blit(strategy_text, (70 + glitch_offset, 195))
+                # Door pressure indicator
+                pressure_text = self.tiny_font.render(f"Pressure: {int(self.left_door_pressure)}", True, MUTED_RED)
+                self.screen.blit(pressure_text, (60 + glitch_offset, 210))
         
         if self.right_light_on:
-            at_right = [a.name for a in self.animatronics if a.location == Location.RIGHT_DOOR]
+            at_right = [a for a in self.animatronics if a.location == Location.RIGHT_DOOR]
             if at_right:
-                warning_bg = pygame.Rect(SCREEN_WIDTH - 250, 80, 200, 50)
+                anim = at_right[0]
+                # Glitch effect for warning box
+                glitch_offset = random.randint(-2, 2) if random.random() < 0.1 else 0
+                warning_bg = pygame.Rect(SCREEN_WIDTH - 250 + glitch_offset, 80, 200, 120)
                 pygame.draw.rect(self.screen, (80, 20, 20), warning_bg)
                 pygame.draw.rect(self.screen, MUTED_RED, warning_bg, 2)
-                warning = self.font.render(f"⚠ {at_right[0]}", True, MUTED_RED)
-                self.screen.blit(warning, (SCREEN_WIDTH - 240, 90))
+                # Pulsing border for more urgency
+                pulse = abs(int(pygame.time.get_ticks() * 0.003) % 20 - 10) / 10.0
+                pygame.draw.rect(self.screen, (int(255 * pulse), 0, 0), warning_bg, 1)
+                # Show animatronic image if available
+                if anim.name in self.animatronic_images:
+                    img = pygame.transform.scale(self.animatronic_images[anim.name], (80, 80))
+                    self.screen.blit(img, (SCREEN_WIDTH - 240 + glitch_offset, 90))
+                warning = self.font.render(anim.name, True, MUTED_RED)
+                self.screen.blit(warning, (SCREEN_WIDTH - 240 + glitch_offset, 180))
+                # Show AI personality
+                strategy_text = self.tiny_font.render(f"[{anim.strategy.upper()}]", True, DIM_YELLOW)
+                self.screen.blit(strategy_text, (SCREEN_WIDTH - 230 + glitch_offset, 195))
+                # Door pressure indicator
+                pressure_text = self.tiny_font.render(f"Pressure: {int(self.right_door_pressure)}", True, MUTED_RED)
+                self.screen.blit(pressure_text, (SCREEN_WIDTH - 240 + glitch_offset, 210))
         
         # Draw HUD
         self.draw_hud()
     
     def draw_camera(self):
-        # Draw camera view - FNAF style monitor with dark atmosphere
+        # Draw camera view - FNAF style monitor with dark atmosphere, full view without HUD
         self.screen.fill((10, 10, 12))
         
         # Draw monitor frame
-        monitor_rect = pygame.Rect(50, 50, SCREEN_WIDTH - 100, SCREEN_HEIGHT - 150)
+        monitor_rect = pygame.Rect(30, 30, SCREEN_WIDTH - 60, SCREEN_HEIGHT - 60)
         pygame.draw.rect(self.screen, (35, 30, 40), monitor_rect)
         pygame.draw.rect(self.screen, DARK_PURPLE, monitor_rect, 3)
         
         # Draw monitor bezel
-        pygame.draw.rect(self.screen, (50, 45, 60), (40, 40, SCREEN_WIDTH - 80, SCREEN_HEIGHT - 130), 8)
+        pygame.draw.rect(self.screen, (50, 45, 60), (20, 20, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 40), 8)
         
         # Draw monitor screen (CRT green)
-        pygame.draw.rect(self.screen, MONITOR_COLOR, (70, 70, SCREEN_WIDTH - 140, SCREEN_HEIGHT - 190))
+        pygame.draw.rect(self.screen, MONITOR_COLOR, (50, 50, SCREEN_WIDTH - 100, SCREEN_HEIGHT - 100))
         
         # Camera static/scanlines effect
         for _ in range(80):
-            x = random.randint(70, SCREEN_WIDTH - 70)
-            y = random.randint(70, SCREEN_HEIGHT - 120)
+            x = random.randint(50, SCREEN_WIDTH - 50)
+            y = random.randint(50, SCREEN_HEIGHT - 50)
             pygame.draw.circle(self.screen, (35, 90, 35), (x, y), 1)
         
         # Draw scanlines for CRT effect
-        for y in range(70, SCREEN_HEIGHT - 120, 3):
-            pygame.draw.line(self.screen, (10, 25, 10), (70, y), (SCREEN_WIDTH - 70, y), 1)
+        for y in range(50, SCREEN_HEIGHT - 50, 3):
+            pygame.draw.line(self.screen, (10, 25, 10), (50, y), (SCREEN_WIDTH - 50, y), 1)
         
         # Show current location
         location_names = {
@@ -359,12 +466,12 @@ class Game:
         }
         
         cam_text = self.large_font.render(f"CAM: {location_names[self.current_camera]}", True, WHITE)
-        self.screen.blit(cam_text, (90, 90))
+        self.screen.blit(cam_text, (70, 70))
         
         # Show animatronics at current location
         at_location = [a for a in self.animatronics if a.location == self.current_camera]
         if at_location:
-            y = 200
+            y = 250
             for anim in at_location:
                 # Draw animatronic image if available, otherwise use placeholder
                 if anim.name in self.animatronic_images:
@@ -385,7 +492,7 @@ class Game:
             self.screen.blit(empty_text, empty_rect)
         
         # Draw camera selection buttons at bottom with dark styling
-        cam_y = SCREEN_HEIGHT - 90
+        cam_y = SCREEN_HEIGHT - 70
         cam_buttons = [
             ("1-STAGE", Location.STAGE, 120),
             ("2-DINING", Location.DINING, 320),
@@ -407,22 +514,19 @@ class Game:
             rect = text.get_rect(center=btn_rect.center)
             self.screen.blit(text, rect)
         
-        # Draw HUD
-        self.draw_hud()
-        
         # Draw close instruction
         hint = self.small_font.render("Press SPACE to close camera", True, WHITE)
-        self.screen.blit(hint, (SCREEN_WIDTH // 2 - 180, SCREEN_HEIGHT - 35))
+        self.screen.blit(hint, (SCREEN_WIDTH // 2 - 180, SCREEN_HEIGHT - 30))
     
     def draw_hud(self):
         # Draw heads-up display with dark, subtle styling
         # Power meter background
-        power_bg = pygame.Rect(15, 15, 250, 80)
+        power_bg = pygame.Rect(15, 15, 250, 100)
         pygame.draw.rect(self.screen, CHARCOAL, power_bg)
         pygame.draw.rect(self.screen, DARK_GREEN, power_bg, 2)
         
-        # Power text
-        power_color = WHITE if self.power > 20 else MUTED_RED
+        # Power text with critical warning
+        power_color = WHITE if self.power > 30 else (MUTED_RED if self.power > 15 else RED)
         power_text = self.font.render(f"POWER: {int(self.power)}%", True, power_color)
         self.screen.blit(power_text, (25, 20))
         
@@ -437,17 +541,24 @@ class Game:
         power_percent = max(0, min(100, self.power)) / 100.0
         if self.power > 50:
             bar_fill_color = DARK_GREEN
-        elif self.power > 20:
+        elif self.power > 30:
             bar_fill_color = DIM_YELLOW
-        else:
+        elif self.power > 15:
             bar_fill_color = MUTED_RED
+        else:
+            bar_fill_color = RED
         
         pygame.draw.rect(self.screen, bar_fill_color, (bar_x, bar_y, bar_width * power_percent, bar_height))
         pygame.draw.rect(self.screen, GRAY, (bar_x, bar_y, bar_width, bar_height), 1)
         
+        # Difficulty indicator
+        hour_multiplier = 1.0 + (self.game_hour ** 1.5) * 0.15
+        difficulty_text = self.tiny_font.render(f"DIFFICULTY: {int(hour_multiplier * 100)}%", True, DIM_YELLOW)
+        self.screen.blit(difficulty_text, (25, 85))
+        
         # Time display with subtle styling
         hours = ["12 AM", "1 AM", "2 AM", "3 AM", "4 AM", "5 AM", "6 AM"]
-        time_bg = pygame.Rect(SCREEN_WIDTH - 265, 15, 250, 80)
+        time_bg = pygame.Rect(SCREEN_WIDTH - 265, 15, 250, 100)
         pygame.draw.rect(self.screen, CHARCOAL, time_bg)
         pygame.draw.rect(self.screen, DARK_PURPLE, time_bg, 2)
         
@@ -464,6 +575,12 @@ class Game:
         time_percent = min(self.game_hour / 6.0, 1.0)
         pygame.draw.rect(self.screen, DARK_PURPLE, (progress_x, progress_y, progress_width * time_percent, progress_height))
         pygame.draw.rect(self.screen, GRAY, (progress_x, progress_y, progress_width, progress_height), 1)
+        
+        # AI Status indicator  
+        active_animatronics = sum(1 for a in self.animatronics if a.active)
+        ai_status = f"THREAT LEVEL: {active_animatronics}/3"
+        ai_text = self.tiny_font.render(ai_status, True, MUTED_RED if active_animatronics >= 2 else DIM_YELLOW)
+        self.screen.blit(ai_text, (SCREEN_WIDTH - 255, 85))
     
     def draw_game_over(self):
         # Draw game over screen with dark, scary atmosphere
@@ -474,16 +591,22 @@ class Game:
         pygame.draw.rect(self.screen, CHARCOAL, (20, 20, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 40), 1)
         
         if self.jumpscare_timer > 0:
-            # Jumpscare animation with pulse effect
+            # Jumpscare animation with pulse effect and character image
             pulse = abs(int(self.jumpscare_timer * 10) % 20 - 10) / 10.0
             jumpscare_text = self.large_font.render(f"{self.jumpscare_animatronic.name.upper()}", True, (255, int(100 * pulse), int(100 * pulse)))
-            rect = jumpscare_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 100))
+            rect = jumpscare_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 180))
             self.screen.blit(jumpscare_text, rect)
             
-            # Draw jumpscare visual with enhanced effect
-            circle_size = int(80 + pulse * 20)
-            pygame.draw.circle(self.screen, (120, 40, 40), (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 100), circle_size)
-            pygame.draw.circle(self.screen, (180, 60, 60), (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 100), circle_size - 5)
+            # Draw animatronic image if available, scaled large for jumpscare effect
+            if self.jumpscare_animatronic.name in self.animatronic_images:
+                img = pygame.transform.scale(self.animatronic_images[self.jumpscare_animatronic.name], (300, 300))
+                img_rect = img.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50))
+                self.screen.blit(img, img_rect)
+            else:
+                # Draw jumpscare visual with enhanced effect if no image
+                circle_size = int(80 + pulse * 20)
+                pygame.draw.circle(self.screen, (120, 40, 40), (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 100), circle_size)
+                pygame.draw.circle(self.screen, (180, 60, 60), (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 100), circle_size - 5)
         else:
             text = self.large_font.render("GAME OVER", True, MUTED_RED)
             rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 80))
@@ -520,6 +643,15 @@ class Game:
     def handle_input(self):
         # Handle keyboard input with independent toggle support
         keys = pygame.key.get_pressed()
+        
+        # Handle difficulty selection on menu with cooldown
+        if self.state == GameState.MENU:
+            if keys[pygame.K_LEFT] and self.camera_cooldown <= 0:
+                self.selected_difficulty = (self.selected_difficulty - 1) % len(self.difficulty_names)
+                self.camera_cooldown = 12
+            elif keys[pygame.K_RIGHT] and self.camera_cooldown <= 0:
+                self.selected_difficulty = (self.selected_difficulty + 1) % len(self.difficulty_names)
+                self.camera_cooldown = 12
         
         # Update individual cooldowns
         if self.left_door_cooldown > 0:
@@ -578,31 +710,41 @@ class Game:
             if start_rect.collidepoint(x, y):
                 self.reset_game()
                 self.state = GameState.PLAYING
+            
+            # Click on difficulty buttons - must match draw_menu calculations
+            button_width = 85
+            button_height = 50
+            button_spacing = 105
+            total_buttons_width = (len(self.difficulty_names) * button_width) + ((len(self.difficulty_names) - 1) * 20)
+            start_x = (SCREEN_WIDTH - total_buttons_width) // 2
+            button_y = 580
+            
+            for i in range(len(self.difficulty_names)):
+                btn_x = start_x + (i * button_spacing)
+                diff_rect = pygame.Rect(btn_x, button_y, button_width, button_height)
+                if diff_rect.collidepoint(x, y):
+                    self.selected_difficulty = i
         
         elif self.state == GameState.PLAYING:
-            # Click on left door
-            left_door_rect = pygame.Rect(30, 400, 120, 280)
-            if left_door_rect.collidepoint(x, y):
-                self.left_door_closed = not self.left_door_closed
-            
-            # Click on right door
-            right_door_rect = pygame.Rect(SCREEN_WIDTH - 150, 400, 120, 280)
-            if right_door_rect.collidepoint(x, y):
-                self.right_door_closed = not self.right_door_closed
-            
-            # Click on left light panel
+            # Define all rectangles
             left_light_rect = pygame.Rect(20, 370, 180, 70)
+            right_light_rect = pygame.Rect(SCREEN_WIDTH - 200, 370, 180, 70)
+            left_door_rect = pygame.Rect(30, 400, 120, 280)
+            right_door_rect = pygame.Rect(SCREEN_WIDTH - 150, 400, 120, 280)
+            camera_button_rect = pygame.Rect(SCREEN_WIDTH // 2 - 100, 20, 200, 60)
+            
+            # Check lights first (higher priority to avoid overlap issues with doors)
             if left_light_rect.collidepoint(x, y):
                 self.left_light_on = not self.left_light_on
-            
-            # Click on right light panel
-            right_light_rect = pygame.Rect(SCREEN_WIDTH - 200, 370, 180, 70)
-            if right_light_rect.collidepoint(x, y):
+            elif right_light_rect.collidepoint(x, y):
                 self.right_light_on = not self.right_light_on
-            
-            # Click to open camera
-            camera_button_rect = pygame.Rect(SCREEN_WIDTH // 2 - 100, 20, 200, 60)
-            if camera_button_rect.collidepoint(x, y):
+            # Check doors only if light wasn't clicked
+            elif left_door_rect.collidepoint(x, y):
+                self.left_door_closed = not self.left_door_closed
+            elif right_door_rect.collidepoint(x, y):
+                self.right_door_closed = not self.right_door_closed
+            # Check camera button
+            elif camera_button_rect.collidepoint(x, y):
                 self.camera_open = True
                 self.state = GameState.CAMERA
         
@@ -653,7 +795,7 @@ class Game:
                 
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        running = False
+                        self.state = GameState.MENU
                     
                     if event.key == pygame.K_SPACE:
                         if self.state == GameState.MENU:
