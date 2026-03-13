@@ -34,7 +34,7 @@ DIM_YELLOW = (180, 160, 80)
 class Game:
     def __init__(self):
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("Five Nights at Blankas")
+        pygame.display.set_caption("Cinco Noches Esenciales")
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, 36)
         self.large_font = pygame.font.Font(None, 48)
@@ -52,6 +52,13 @@ class Game:
                 self.animatronic_images[name] = pygame.transform.scale(self.animatronic_images[name], (150, 150))
         except pygame.error as e:
             print(f"Warning: Could not load animatronic images: {e}")
+        
+        # Ladda jumpscare-bilder (spökvän versioner för game over)
+        self.jumpscare_images = {}
+        try:
+            self.jumpscare_images['Tablos'] = pygame.image.load('tablosjumpscare.jpg')
+        except pygame.error as e:
+            print(f"Warning: Could not load jumpscare images: {e}")
         
         self.state = GameState.MENU
         self.mouse_pos = (0, 0)
@@ -96,27 +103,32 @@ class Game:
         # Dörrtrycksspårning för AI-strategi
         self.left_door_pressure = 0.0
         self.right_door_pressure = 0.0
+        
+        # Power drain tracking
+        self.current_drain_rate = 0.0
     
     def update_power(self, dt: float):
-        # Uppdatera strömförbrukningen med skalasvårighetsgrad
-        drain_rate = 0.08  # Basavlopp (något reducerat)
+        # Uppdatera strömförbrukningen - CONSTANT across all difficulties
+        # Power drain is linear and the same for all game modes
+        drain_rate = 0.05  # Base drain (lowered for balance)
         
-        # Öka strömavloppets intensitet när natten fortskrider
-        hour_multiplier = 1.0 + (self.game_hour * 0.12)
-        
+        # Each appliance adds power usage linearly
         if self.left_door_closed:
-            drain_rate += 0.5 * hour_multiplier
+            drain_rate += 0.25  # Door drain
         if self.right_door_closed:
-            drain_rate += 0.5 * hour_multiplier
+            drain_rate += 0.25  # Door drain
         if self.left_light_on:
-            drain_rate += 0.15 * hour_multiplier
+            drain_rate += 0.10  # Light drain
         if self.right_light_on:
-            drain_rate += 0.15 * hour_multiplier
+            drain_rate += 0.10  # Light drain
         if self.camera_open:
-            drain_rate += 0.12 * hour_multiplier
+            drain_rate += 0.08  # Camera drain
         
-        # Tillämpa svårighetsmultiplikator på strömavlopp
-        drain_rate *= self.difficulty
+        # NO difficulty multiplier applied - power drain is identical on all difficulties
+        # Difficulty only affects animatronic behavior, not power consumption
+        
+        # Store current drain rate for HUD display
+        self.current_drain_rate = drain_rate
         
         self.power -= drain_rate * dt
         self.power = max(0, self.power)
@@ -193,7 +205,7 @@ class Game:
         pygame.draw.line(self.screen, DARK_PURPLE, (0, 150), (SCREEN_WIDTH, 150), 2)
         pygame.draw.line(self.screen, DARK_PURPLE, (0, SCREEN_HEIGHT - 150), (SCREEN_WIDTH, SCREEN_HEIGHT - 150), 2)
         
-        title = self.large_font.render("FIVE NIGHTS AT BLANKAS", True, MUTED_RED)
+        title = self.large_font.render("CINCO NOCHES ESENCIALES", True, MUTED_RED)
         title_rect = title.get_rect(center=(SCREEN_WIDTH // 2, 60))
         self.screen.blit(title, title_rect)
         
@@ -550,10 +562,18 @@ class Game:
         pygame.draw.rect(self.screen, bar_fill_color, (bar_x, bar_y, bar_width * power_percent, bar_height))
         pygame.draw.rect(self.screen, GRAY, (bar_x, bar_y, bar_width, bar_height), 1)
         
-        # Svårighetsindikator
-        hour_multiplier = 1.0 + (self.game_hour ** 1.5) * 0.15
-        difficulty_text = self.tiny_font.render(f"DIFFICULTY: {int(hour_multiplier * 100)}%", True, DIM_YELLOW)
-        self.screen.blit(difficulty_text, (25, 85))
+        # Power Usage Bar - shows current drain rate
+        # Calculate max possible drain for scaling (all systems on)
+        # No difficulty multiplier - drain is constant across all difficulties
+        max_drain = 0.05 + 0.25 + 0.25 + 0.10 + 0.10 + 0.08
+        usage_percent = self.current_drain_rate / max_drain if max_drain > 0 else 0
+        usage_percent = max(0, min(1, usage_percent))  # Clamp to 0-1
+        
+        usage_label = self.tiny_font.render(f"USAGE: {int(usage_percent * 100)}%", True, DIM_YELLOW)
+        self.screen.blit(usage_label, (25, 85))
+        
+        # Keep difficulty calculation in code but don't display it visually
+        # hour_multiplier = 1.0 + (self.game_hour ** 1.5) * 0.15  # For future reference only
         
         # Tidsdisplay med subtil styling
         hours = ["12 AM", "1 AM", "2 AM", "3 AM", "4 AM", "5 AM", "6 AM"]
@@ -597,7 +617,12 @@ class Game:
             self.screen.blit(jumpscare_text, rect)
             
             # Rita animatronisk bild om tillgänglig, skalad stor för jumpscare-effekt
-            if self.jumpscare_animatronic.name in self.animatronic_images:
+            # Prioritera jumpscare-bilder om de finns
+            if self.jumpscare_animatronic.name in self.jumpscare_images:
+                img = pygame.transform.scale(self.jumpscare_images[self.jumpscare_animatronic.name], (400, 400))
+                img_rect = img.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50))
+                self.screen.blit(img, img_rect)
+            elif self.jumpscare_animatronic.name in self.animatronic_images:
                 img = pygame.transform.scale(self.animatronic_images[self.jumpscare_animatronic.name], (300, 300))
                 img_rect = img.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50))
                 self.screen.blit(img, img_rect)
