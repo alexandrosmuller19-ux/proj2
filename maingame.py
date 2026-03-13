@@ -1,3 +1,12 @@
+'''
+maingame.PY: en FNaF kopia
+
+__author__  = "Alessandro Muller & Pablo Andersson Melian"
+__version__ = "1.0.0"
+__email__   = "alessandro.muller@elev.ga.dbgy.se & pablo.anderssonmelian@elev.ga.dbgy.se"
+'''
+
+
 import pygame
 import random
 import sys
