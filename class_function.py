@@ -43,6 +43,7 @@ class Animatronic:
     preferred_side: str = "random"  # "left", "right", or "random"
     stalled_moves: int = 0  # Konsekutiva flyttningar till samma plats indikerar uthållighet
     last_blocked_time: float = 0.0  # Spåra när den senast blockerades vid dörr
+    door_blocked_duration: float = 0.0  # Kontinuerlig tid att dörren är blockerad
     
     def update(self, dt: float, game_hour: int) -> bool:
         # Uppdatera animatronik, returnerar True om animatroniken förflyttades
@@ -71,31 +72,39 @@ class Animatronic:
             Location.STAGE: [Location.DINING],
             Location.DINING: [Location.HALLWAY],
             Location.HALLWAY: [Location.LEFT_DOOR, Location.RIGHT_DOOR],
-            Location.LEFT_DOOR: [Location.LEFT_DOOR],
-            Location.RIGHT_DOOR: [Location.RIGHT_DOOR]
+            Location.LEFT_DOOR: [Location.HALLWAY],  # Can retreat back to hallway
+            Location.RIGHT_DOOR: [Location.HALLWAY]  # Can retreat back to hallway
         }
         
         # Vid dörr med strategiskt beteende
         if self.location in [Location.LEFT_DOOR, Location.RIGHT_DOOR]:
             if door_blocked:
+                # Spåra hur länge dörren har varit blockerad
+                self.door_blocked_duration += dt
                 self.last_blocked_time = 2.0
-                # Dra dig tillbaka baserat på uthållighet och strategi
-                if self.strategy == "cautious":
-                    retreat_chance = 0.5
-                elif self.strategy == "aggressive":
-                    retreat_chance = 0.1
-                elif self.strategy == "strategic":
-                    retreat_chance = 0.2
-                else:  # slumpmässig
-                    retreat_chance = 0.3
                 
-                if random.random() < retreat_chance:
+                # Beräkna retreatchans baserat på strategi och blockerad tid
+                base_retreat_chance = {
+                    "cautious": 0.5,
+                    "aggressive": 0.1,
+                    "strategic": 0.2,
+                    "random": 0.3
+                }.get(self.strategy, 0.3)
+                
+                # Öka retreatchansen proportionellt med blockerad tid (tvinga retreat efter ~10 sekunder)
+                time_multiplier = min(self.door_blocked_duration / 10.0, 1.0)
+                adjusted_retreat_chance = base_retreat_chance + (0.8 * time_multiplier)
+                
+                if random.random() < adjusted_retreat_chance:
                     self.location = Location.HALLWAY
                     self.stalled_moves = 0
+                    self.door_blocked_duration = 0.0  # Återställ blockerad tid vid retreat
                 else:
                     self.stalled_moves += 1
                 return
             else:
+                # Dörr är öppen, återställ blockerad tid
+                self.door_blocked_duration = 0.0
                 self.stalled_moves = 0
         
         if self.location in path:
@@ -103,23 +112,32 @@ class Animatronic:
             
             # Strategiskt dörurval
             if self.location == Location.HALLWAY and possible == [Location.LEFT_DOOR, Location.RIGHT_DOOR]:
-                if self.strategy == "aggressive":
-                    # Aggressiv: välj dörren som inte har använts nyligen
-                    if doors_pressure:
-                        left_pressure, right_pressure = doors_pressure
-                        if left_pressure < right_pressure:
-                            self.location = Location.LEFT_DOOR
+                # Enforce preferred_side if character has one (Goku left, Vegeta right)
+                if self.preferred_side == "left":
+                    self.location = Location.LEFT_DOOR
+                elif self.preferred_side == "right":
+                    self.location = Location.RIGHT_DOOR
+                # Random choice for Tablos or others
+                elif self.preferred_side == "random":
+                    if self.strategy == "aggressive":
+                        # Aggressiv: välj dörren som inte har använts nyligen
+                        if doors_pressure:
+                            left_pressure, right_pressure = doors_pressure
+                            if left_pressure < right_pressure:
+                                self.location = Location.LEFT_DOOR
+                            else:
+                                self.location = Location.RIGHT_DOOR
                         else:
-                            self.location = Location.RIGHT_DOOR
+                            self.location = random.choice(possible)
+                    elif self.strategy == "strategic":
+                        # Strategisk: fokusera på en dörr men byt ibland
+                        if not hasattr(self, '_strategy_choice'):
+                            self._strategy_choice = random.choice(["left", "right"])
+                        if random.random() < 0.1:  # 10% chans att byta strategi
+                            self._strategy_choice = "left" if self._strategy_choice == "right" else "right"
+                        self.location = Location.LEFT_DOOR if self._strategy_choice == "left" else Location.RIGHT_DOOR
                     else:
                         self.location = random.choice(possible)
-                elif self.strategy == "strategic":
-                    # Strategisk: fokusera på en dörr men byt ibland
-                    if self.preferred_side == "random":
-                        self.preferred_side = random.choice(["left", "right"])
-                    if random.random() < 0.1:  # 10% chans att byta strategi
-                        self.preferred_side = "left" if self.preferred_side == "right" else "right"
-                    self.location = Location.LEFT_DOOR if self.preferred_side == "left" else Location.RIGHT_DOOR
                 else:
                     self.location = random.choice(possible)
             else:
@@ -146,17 +164,17 @@ def create_animatronics() -> List[Animatronic]:
         Animatronic(
             "Tablos", Location.STAGE, 2, 5.0,
             aggression=0.6, persistence=0.8, strategy="strategic",
-            preferred_side="random"
+            preferred_side="random"  # Tablos chooses random door
         ),
         Animatronic(
             "Vegeta", Location.STAGE, 3, 4.0,
             aggression=0.9, persistence=0.6, strategy="aggressive",
-            preferred_side="random"
+            preferred_side="right"  # Vegeta always goes right
         ),
         Animatronic(
             "Goku", Location.STAGE, 3, 4.5,
             aggression=0.4, persistence=0.5, strategy="cautious",
-            preferred_side="random"
+            preferred_side="left"  # Goku always goes left
         ),
     ]
 
@@ -177,8 +195,8 @@ def get_movement_path() -> Dict[Location, List[Location]]:
         Location.STAGE: [Location.DINING],
         Location.DINING: [Location.HALLWAY],
         Location.HALLWAY: [Location.LEFT_DOOR, Location.RIGHT_DOOR],
-        Location.LEFT_DOOR: [Location.LEFT_DOOR],
-        Location.RIGHT_DOOR: [Location.RIGHT_DOOR]
+        Location.LEFT_DOOR: [Location.HALLWAY],  # Can retreat back to hallway
+        Location.RIGHT_DOOR: [Location.HALLWAY]  # Can retreat back to hallway
     }
 
 

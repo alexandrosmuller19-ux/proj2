@@ -331,9 +331,8 @@ class Game:
         light_text = self.font.render("LEFT LIGHT", True, GRAY)
         self.screen.blit(light_text, (30, 375))
         
-        # Toggle switch visual
-        # Visuell omkopplare
-        switch_rect = pygame.Rect(120, switch_y, 60, 25)
+        # Toggle switch visual - positioned properly within panel
+        switch_rect = pygame.Rect(110, 395, 70, 30)
         pygame.draw.rect(self.screen, (40, 40, 45), switch_rect)
         pygame.draw.rect(self.screen, DARK_GREEN if self.left_light_on else DARK_GRAY, switch_rect, 2)
         
@@ -354,8 +353,8 @@ class Game:
         light_text_r = self.font.render("RIGHT LIGHT", True, GRAY)
         self.screen.blit(light_text_r, (SCREEN_WIDTH - 190, 375))
         
-        # Visuell omkopplare
-        switch_rect_r = pygame.Rect(SCREEN_WIDTH - 90, switch_y, 60, 25)
+        # Visuell omkopplare - positioned properly within panel
+        switch_rect_r = pygame.Rect(SCREEN_WIDTH - 100, 395, 70, 30)
         pygame.draw.rect(self.screen, (40, 40, 45), switch_rect_r)
         pygame.draw.rect(self.screen, DARK_GREEN if self.right_light_on else DARK_GRAY, switch_rect_r, 2)
         
