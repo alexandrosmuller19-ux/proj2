@@ -422,6 +422,24 @@ class Game:
                 # Dörrtrycksindikator
                 pressure_text = self.tiny_font.render(f"Pressure: {int(self.left_door_pressure)}", True, MUTED_RED)
                 self.screen.blit(pressure_text, (60 + glitch_offset, 210))
+            else:
+                # Visa ljusindikator när ljus är på men ingen fiende är närvarande
+                light_indicator_bg = pygame.Rect(30, 220, 160, 130)
+                pygame.draw.rect(self.screen, (20, 60, 20), light_indicator_bg)
+                pygame.draw.rect(self.screen, (100, 255, 100), light_indicator_bg, 2)
+                # Pulsande gräns för ljuseffekt
+                pulse = abs(int(pygame.time.get_ticks() * 0.004) % 20 - 10) / 10.0
+                pygame.draw.rect(self.screen, (int(100 + 155 * pulse), int(255), int(100 + 155 * pulse)), light_indicator_bg, 1)
+                # Rita ljusglob (lampa)
+                pygame.draw.circle(self.screen, (200, 255, 200), (110, 270), 25)
+                pygame.draw.circle(self.screen, (100, 255, 100), (110, 270), 25, 3)
+                # Lägg glow/strålning runt lampa
+                for i in range(3):
+                    alpha = int(100 - i * 30)
+                    pygame.draw.circle(self.screen, (100, 200, 100), (110, 270), 25 + (i + 1) * 6, 1)
+                # Ljusindikator text
+                light_text = self.tiny_font.render("CLEAR", True, (100, 255, 100))
+                self.screen.blit(light_text, (45, 305))
         
         if self.right_light_on:
             at_right = [a for a in self.animatronics if a.location == Location.RIGHT_DOOR]
@@ -447,6 +465,24 @@ class Game:
                 # Dörrtrycksindikator
                 pressure_text = self.tiny_font.render(f"Pressure: {int(self.right_door_pressure)}", True, MUTED_RED)
                 self.screen.blit(pressure_text, (SCREEN_WIDTH - 240 + glitch_offset, 210))
+            else:
+                # Visa ljusindikator när ljus är på men ingen fiende är närvarande
+                light_indicator_bg = pygame.Rect(SCREEN_WIDTH - 190, 220, 160, 130)
+                pygame.draw.rect(self.screen, (20, 60, 20), light_indicator_bg)
+                pygame.draw.rect(self.screen, (100, 255, 100), light_indicator_bg, 2)
+                # Pulsande gräns för ljuseffekt
+                pulse = abs(int(pygame.time.get_ticks() * 0.004) % 20 - 10) / 10.0
+                pygame.draw.rect(self.screen, (int(100 + 155 * pulse), int(255), int(100 + 155 * pulse)), light_indicator_bg, 1)
+                # Rita ljusglob (lampa)
+                pygame.draw.circle(self.screen, (200, 255, 200), (SCREEN_WIDTH - 110, 270), 25)
+                pygame.draw.circle(self.screen, (100, 255, 100), (SCREEN_WIDTH - 110, 270), 25, 3)
+                # Lägg glow/strålning runt lampa
+                for i in range(3):
+                    alpha = int(100 - i * 30)
+                    pygame.draw.circle(self.screen, (100, 200, 100), (SCREEN_WIDTH - 110, 270), 25 + (i + 1) * 6, 1)
+                # Ljusindikator text
+                light_text = self.tiny_font.render("CLEAR", True, (100, 255, 100))
+                self.screen.blit(light_text, (SCREEN_WIDTH - 175, 305))
         
         # Rita HUD
         self.draw_hud()
